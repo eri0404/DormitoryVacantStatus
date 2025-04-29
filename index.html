@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dormitory Map</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Roboto', sans-serif;
+    }
+
+    #map {
+      height: 100vh;
+      width: 100%;
+    }
+
+    .dorm-name {
+      font-family: 'Roboto', sans-serif;
+      font-size: 18px;
+      font-weight: 500;
+      color: #2c3e50;
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+// Initialize the map
+const map = L.map('map').setView([15.2206, 120.6873], 15);
+
+// OSM Layer
+const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors'
+});
+
+// Satellite Layer
+const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Tiles &copy; Esri'
+});
+
+// Layer Control
+L.control.layers({ "OpenStreetMap": osmLayer, "Satellite": satelliteLayer }).addTo(map);
+
+// Default layer
+osmLayer.addTo(map);
+
+// Dorm markers storage
+const dormMarkers = [];
+
+// CSV URL
+const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTtHMGu3PPN9f5_YTl9bi8FQ8s4zhYyR5mcqW67_0-Js1NnjlfEMLkj3c-B4OtbLVaRC8z6Wyhhj0CA/pub?gid=1548964066&single=true&output=csv';
+
+// Fetch and parse CSV
+fetch(csvUrl)
+  .then(response => response.text())
+  .then(csvData => {
+    const data = parseCSV(csvData);
+    addMarkers(data);
+  })
+  .catch(error => console.error('Error loading CSV:', error));
+
+// Parse CSV into array
+function parseCSV(csv) {
+  const rows = csv.split('\n').filter(row => row.trim());
+  const headers = rows[0].split(',').map(h => h.trim());
+  const data = [];
+
+  rows.slice(1).forEach(row => {
+    const values = row.split(',');
+    const entry = {};
+    headers.forEach((header, index) => {
+      entry[header] = values[index] ? values[index].trim() : '';
+    });
+    data.push(entry);
+  });
+
+  return data;
+}
+
+// Create markers
+function addMarkers(dorms) {
+  dorms.forEach(dorm => {
+    const lat = parseFloat(dorm['Latitude']);
+    const lng = parseFloat(dorm['Longitude']);
+    const name = dorm['Piliin ang iyong Dormitory'];
+    const availability = dorm['May available bed space o room pa ba sa iyong boarding house?'];
+
+    if (!lat || !lng || !name) return;
+
+    const markerColor = (availability && availability.toLowerCase() === 'wala') ? 'red' : 'green';
+
+    const markerIcon = L.icon({
+      iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-${markerColor}.png`,
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.3/dist/images/marker-shadow.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41]
+    });
+
+    const marker = L.marker([lat, lng], { icon: markerIcon }).addTo(map);
+    marker.bindPopup(generatePopup(dorm));
+
+    dormMarkers.push({
+      name: name,
+      marker: marker
+    });
+  });
+}
+
+// Generate popup HTML
+function generatePopup(dorm) {
+  const name = dorm['Piliin ang iyong Dormitory'];
+  const contact = dorm['Contact Number'];
+  const availability = dorm['May available bed space o room pa ba sa iyong boarding house?'];
+
+  const availabilityMap = {
+    'Available Bed Space - for GIRLS/BOYS': 'Available Bed Space (Girls/Boys)',
+    'Available Bed Space - for GIRLS': 'Available Bed Space (Girls)',
+    'Available Bed Space - for BOYS': 'Available Bed Space (Boys)',
+    'Available Solo Room - for GIRLS/BOYS': 'Available Solo Room (Girls/Boys)',
+    'Available Solo Room - for GIRLS': 'Available Solo Room (Girls)',
+    'Available Solo Room - for BOYS': 'Available Solo Room (Boys)',
+    'Available Shared Room - for GIRLS/BOYS': 'Available Shared Room (Girls/Boys)',
+    'Available Shared Room - for GIRLS': 'Available Shared Room (Girls)',
+    'Available Shared Room - for BOYS': 'Available Shared Room (Boys)'
+  };
+
+  let popup = `
+    <div class="popup-content">
+      <b class="dorm-name">${name}</b><br>
+      ${contact ? `<b>Contact:</b> ${contact}<br>` : ''}
+  `;
+
+  if (availability && availability.toLowerCase() === 'wala') {
+    popup += `<span style="color:red;"><b>No Available Slot</b></span>`;
+  } else {
+    for (const key in availabilityMap) {
+      if (dorm[key] && dorm[key].trim() !== '') {
+        popup += `<b>${availabilityMap[key]}:</b> ${dorm[key]}<br>`;
+      }
+    }
+  }
+
+  popup += '</div>';
+  return popup;
+}
+</script>
+</body>
+</html>
